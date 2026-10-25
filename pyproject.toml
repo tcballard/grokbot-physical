@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hey-grokbot-orb"
+version = "0.1.0"
+description = "Hands-free countertop voice orb: local wake word, xAI Realtime voice, and Grok Bot webhooks."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["voice", "grok", "wake-word", "raspberry-pi", "openwakeword"]
+dependencies = [
+    "aiohttp>=3.10,<4",
+    "numpy>=1.26",
+    "websockets>=12",
+]
+
+[project.optional-dependencies]
+audio = [
+    "sounddevice>=0.4.6",
+    "openwakeword>=0.6.0",
+]
+pi = [
+    "sounddevice>=0.4.6",
+    "openwakeword>=0.6.0",
+    "rpi-ws281x>=5.0.0",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+grokbot-orb = "grokbot_orb.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
