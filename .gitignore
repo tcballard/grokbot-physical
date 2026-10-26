@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+*.egg-info/
+dist/
+build/
+models/*.onnx
+models/*.tflite
+agent-tools/
+*.stl
+*.3mf
+.DS_Store
