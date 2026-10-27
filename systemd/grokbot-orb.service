@@ -9,11 +9,11 @@ User=grokbot
 SupplementaryGroups=audio gpio
 WorkingDirectory=/opt/hey-grokbot-orb
 EnvironmentFile=/etc/grokbot-orb.env
-ExecStart=/opt/hey-grokbot-orb/.venv/bin/grokbot-orb
+ExecStart=/opt/hey-grokbot-orb/bin/grokbot-orb
 Restart=on-failure
 RestartSec=3
 Nice=-10
-# rpi_ws281x opens the PWM mailbox. If the journal says the NeoPixel backend
+# rs_ws281x opens the PWM mailbox. If the journal says the NeoPixel backend
 # is unavailable, change User= to root and daemon-reload.
 NoNewPrivileges=false
 

@@ -1,0 +1,33 @@
+[package]
+name = "grokbot-orb"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT"
+description = "Hands-free countertop voice orb"
+
+[features]
+default = ["wake"]
+wake = ["dep:tract-onnx"]
+pi = ["dep:rs_ws281x"]
+
+[dependencies]
+anyhow = "1"
+axum = "0.8"
+base64 = "0.22"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+hound = "3.5"
+tract-onnx = { version = "0.23", optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rs_ws281x = { version = "0.5.1", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints.rust]
+unsafe_code = "forbid"
