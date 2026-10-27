@@ -1,12 +1,21 @@
-# Hey Grok Bot Orb
+<h1 align="center">Hey Grok Bot Orb</h1>
+<p align="center"><strong>A hands-free voice orb for your Grok Bots.</strong></p>
 
-A hands-free countertop voice orb. It sits on the worktop, listens locally for **“Hey Grok Bot”**, talks over the xAI Realtime voice API, and hands real work to a Grok Bot. When that bot finishes, it calls the orb back and the orb says the result out loud. A 16-LED ring under the sphere glows warm orange while it is listening, then takes the colour of whichever bot is working.
+Build a countertop assistant that listens for a wake word locally, talks with you using xAI Realtime, and sends tasks to your Grok Bots. When a bot finishes, the orb speaks its reply and its LED halo shows which bot is working.
 
-The shape follows a concept render by [@Texas_Twins_Dad](https://x.com/Texas_Twins_Dad): a glossy black sphere with a pool of warm light where it meets the counter. The hands-free request came from [@martin_casado](https://x.com/martin_casado). This is an unofficial community project. Grok, xAI, and Grok Bot are trademarks of their owners.
+Try the callback server on a Linux laptop with Rust 1.91 or later, without a microphone or Pi:
 
-The daemon runs on a Raspberry Pi (Track B) or on any Linux laptop in `--dry-run`. The ESP32-S3 in Track A is a microphone and speaker front-end. It does not run this Rust daemon.
+```bash
+cargo run --locked -- --dry-run
+```
 
-**Rust port preview:** the application runtime is now Rust, with native ONNX inference through `tract-onnx`. Python is not required. The port has automated protocol and recorded-audio checks; microphone, speaker, and NeoPixel validation on a physical Pi is still required before replacing an installed unit. See [PORTING.md](PORTING.md).
+Then visit `http://localhost:8765/health`. For a simulated task and full setup, see [Try it on a laptop](#try-it-on-a-laptop) and [Pi setup](#pi-setup).
+
+**Preview:** The Rust daemon has passed automated protocol and recorded-audio tests. The Pi microphone, speaker and LED ring still need physical validation. See [porting and verification notes](PORTING.md).
+
+**Device preview pending:** An on-device photograph or demo will go here when available.
+
+The enclosure follows a concept render by [@Texas_Twins_Dad](https://x.com/Texas_Twins_Dad); the hands-free request came from [@martin_casado](https://x.com/martin_casado). This is an unofficial community project. Grok, xAI, and Grok Bot are trademarks of their owners.
 
 ## How a turn works
 
