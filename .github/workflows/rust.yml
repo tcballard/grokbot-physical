@@ -1,0 +1,26 @@
+name: Rust
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: sudo apt-get update && sudo apt-get install -y libclang-dev
+      - run: cargo fmt --check
+      - run: cargo build --locked --all-features
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --all-features
+      - run: cargo test --locked --no-default-features
+      - run: cargo doc --locked --no-deps --all-features
+      - run: scripts/fetch_wake_models.sh
+      - run: cargo test --locked --all-features --test wake_inference -- --include-ignored

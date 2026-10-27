@@ -4,7 +4,9 @@ A hands-free countertop voice orb. It sits on the worktop, listens locally for *
 
 The shape follows a concept render by [@Texas_Twins_Dad](https://x.com/Texas_Twins_Dad): a glossy black sphere with a pool of warm light where it meets the counter. The hands-free request came from [@martin_casado](https://x.com/martin_casado). This is an unofficial community project. Grok, xAI, and Grok Bot are trademarks of their owners.
 
-The daemon runs on a Raspberry Pi (Track B) or on any Linux laptop in `--dry-run`. The ESP32-S3 in Track A is a microphone and speaker front-end. It does not run this Python process.
+The daemon runs on a Raspberry Pi (Track B) or on any Linux laptop in `--dry-run`. The ESP32-S3 in Track A is a microphone and speaker front-end. It does not run this Rust daemon.
+
+**Rust port preview:** the application runtime is now Rust, with native ONNX inference through `tract-onnx`. Python is not required. The port has automated protocol and recorded-audio checks; microphone, speaker, and NeoPixel validation on a physical Pi is still required before replacing an installed unit. See [PORTING.md](PORTING.md).
 
 ## How a turn works
 
@@ -24,10 +26,10 @@ sequenceDiagram
     Orb->>Room: spoken_text
 ```
 
-1. **Offline wake word (`openWakeWord`).** The microphone fills a 16 kHz ring buffer. `hey_grok_bot.onnx` scores each 80 ms frame on the device. Until the score crosses the threshold, no audio leaves the orb. If that file is not present, the daemon loads the pretrained `hey_jarvis` model so the rest of the stack can be brought up the same day. Say “Hey Jarvis” in that case.
+1. **Offline wake word (openWakeWord ONNX models in Rust).** The microphone fills a 16 kHz ring buffer. `hey_grok_bot.onnx` scores each 80 ms frame on the device. Until the score crosses the threshold, no audio leaves the orb. If that file is not present, the daemon loads the pretrained `hey_jarvis` model so the rest of the stack can be brought up the same day. Say “Hey Jarvis” in that case.
 2. **Sub-400 ms conversational voice (`xAI Realtime API`).** A wake opens `wss://api.x.ai/v1/realtime?model=grok-voice-latest` with `server_vad`, little-endian mono PCM16 at 24 kHz, and `reasoning.effort` set to `none`. The pre-roll in the ring is sent as soon as the socket is up, so the start of the sentence is not clipped. The sub-400 ms figure is the model’s turn latency once that socket is open. If the ALSA device is running at 16 kHz or 48 kHz, the daemon resamples in both directions.
 3. **Real agent action (`Grok Bot Webhook Routine`).** The Realtime session is given `delegate_to_grok_bot(task, bot_name)`. The daemon POSTs the task to `https://api2.cursor.sh/automations/webhook/<id>` with `Authorization: Bearer …` and `X-Automation-Key`. The halo shifts to that bot: electric blue for Bob, emerald for OmaBot, purple for Writer. The voice model only acknowledges (“Bob’s on it.”). It does not invent the result.
-4. **Async spoken callback (`/speak`).** An aiohttp server listens on port **8765**, on the LAN or on a Tailscale Funnel URL. When the bot finishes, it POSTs `{"spoken_text": "...", "status": "done"}`. If a Realtime session is still open, the orb injects a `force_message` so the same voice says it. If the orb is idle, it plays TTS (xAI `/v1/tts`, then `espeak-ng` if you ask for that fallback) and goes back to the wake word.
+4. **Async spoken callback (`/speak`).** An Axum server listens on port **8765**, on the LAN or on a Tailscale Funnel URL. When the bot finishes, it POSTs `{"spoken_text": "...", "status": "done"}`. If a Realtime session is still open, the orb injects a `force_message` so the same voice says it. If the orb is idle, it plays TTS (xAI `/v1/tts`, then `espeak-ng` if you ask for that fallback) and goes back to the wake word.
 
 | Halo state | Colour | What you see |
 | --- | --- | --- |
@@ -39,23 +41,21 @@ sequenceDiagram
 | `working:writer` | purple `(168, 85, 247)` | comet |
 | `error` | red | fast blink |
 
-Add a bot by extending `BOTS` in `src/grokbot_orb/bots.py`. The tool enum, the spoken instructions, and the halo colour all come from that table.
+Add a bot in `src/bots.rs`: update `NAMES`, `ROSTER`, aliases and `colour`. These feed the tool schema, spoken instructions and halo.
 
 ## Try it on a laptop
 
-No HAT, no LED hat, no microphone.
+No HAT, no LED hat, no microphone. Install Rust 1.91 or newer first. The optional `pi` feature needs `libclang-dev` at build time; dry-run and normal builds do not.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+cargo build --release --locked
 cp .env.example .env
 ```
 
 Put the webhook URL and the two secrets in `.env` (see [Grok Bot routine](#grok-bot-routine) below). Then:
 
 ```bash
-grokbot-orb --dry-run --simulate-wake \
+./target/release/grokbot-orb --env-file .env --dry-run --simulate-wake \
   --text "What's on the kitchen calendar tomorrow?" \
   --bot bob
 ```
@@ -72,12 +72,15 @@ curl -s -X POST localhost:8765/speak \
 With `XAI_API_KEY` set, `--simulate-wake --text "…"` opens a real Realtime session and lets the model decide to call the tool. `--dry-run` on its own just serves `/health` and `/speak`, which is enough to test a callback from another machine.
 
 ```bash
-pytest
+cargo test
+cargo clippy --all-targets --all-features -- -D warnings
+scripts/fetch_wake_models.sh
+cargo test --test wake_inference -- --include-ignored
 ```
 
 ## Track A — fastest puck, £43.70 / ~$48
 
-ReSpeaker Lite: XIAO ESP32-S3 plus the XMOS XU316 DSP (echo cancellation, noise suppression, two mics). This is the quick physical build. The Python daemon still runs on a Linux host — a Pi, a NUC, or the laptop you already used for `--dry-run`. The Lite’s XU316 enumerates as a USB microphone and speaker; point `AUDIO_INPUT_DEVICE` and `AUDIO_OUTPUT_DEVICE` at that card. Confirm the USB-audio mode against the current Seeed wiki before you solder anything. The silkscreen has moved between batches.
+ReSpeaker Lite: XIAO ESP32-S3 plus the XMOS XU316 DSP (echo cancellation, noise suppression, two mics). This is the quick physical build. The Rust daemon still runs on a Linux host — a Pi, a NUC, or the laptop you already used for `--dry-run`. The Lite’s XU316 enumerates as a USB microphone and speaker; point `AUDIO_INPUT_DEVICE` and `AUDIO_OUTPUT_DEVICE` at that card. Confirm the USB-audio mode against the current Seeed wiki before you solder anything. The silkscreen has moved between batches.
 
 The ESP32-S3 can instead be flashed with ESPHome and used as a Home Assistant satellite. That path does not run `grokbot-orb`.
 
@@ -148,7 +151,7 @@ Level shifter, one gate of the 74AHCT125:
 
 Put the 1000 µF capacitor across the ring’s 5 V and GND, close to the ring. The data line is 5 V logic out of the shifter. Driving DIN straight from the Pi’s 3.3 V pin is how these rings flicker.
 
-The HAT’s I2S peripheral owns GPIO 18. `rpi_ws281x` on that pin fights the codec. GPIO 12 is PWM0 and is free on a Zero 2 W, which has no analogue headphone jack to steal the PWM block.
+The HAT’s I2S peripheral owns GPIO 18. `rs_ws281x` on that pin fights the codec. GPIO 12 is PWM0 and is free on a Zero 2 W, which has no analogue headphone jack to steal the PWM block.
 
 ### Driver
 
@@ -171,7 +174,7 @@ aplay -D plughw:CARD=seeed2micvoicec,DEV=0 /tmp/mic.wav
 
 Set both `AUDIO_INPUT_DEVICE` and `AUDIO_OUTPUT_DEVICE` to that device name. The Pi’s default card is often HDMI, which means the orb hears you and the reply comes out of a television in another room.
 
-`AUDIO_RATE=0` follows the card. 16 kHz and 48 kHz are both fine; the daemon resamples to 16 kHz for the wake word and 24 kHz for the Realtime API.
+`AUDIO_RATE=0` now selects 16 kHz for both native ALSA utilities. Set `AUDIO_RATE=48000` for cards requiring 48 kHz; the daemon resamples to 16 kHz for the wake word and 24 kHz for the Realtime API.
 
 ## Enclosure
 
@@ -216,15 +219,15 @@ sudo systemctl start grokbot-orb
 journalctl -u grokbot-orb -f
 ```
 
-The script installs Python, PortAudio, espeak-ng, a virtualenv at `/opt/hey-grokbot-orb`, the `.[pi]` extra (`sounddevice`, `openwakeword`, `rpi-ws281x`), and `grokbot-orb.service`. It enables the unit and does not start it. The env file is created mode `600` only if `/etc/grokbot-orb.env` is missing, so a re-run will not wipe your keys. systemd reads that file as root; the service user does not need to.
+The script builds Rust with `--release --features pi`, installs the binary at `/opt/hey-grokbot-orb/bin/grokbot-orb`, installs ALSA utilities and espeak-ng, fetches checksum-verified ONNX assets, and installs `grokbot-orb.service`. Install Rust 1.91+ for the invoking user before running it. On a low-memory Pi Zero 2 W, use a matching prebuilt ARM64 binary via `sudo ORB_BINARY=/absolute/path/grokbot-orb ./scripts/install_pi.sh` instead of compiling on-device. It enables the unit and does not start it. The env file is created mode `600` only if `/etc/grokbot-orb.env` is missing, so a re-run will not wipe your keys. systemd reads that file as root; the service user does not need to.
 
-`rpi_ws281x` opens the PWM mailbox. If the journal says the NeoPixel backend is unavailable, set `User=root` in the unit, `daemon-reload`, and restart. The daemon falls back to logging halo transitions, so a permissions problem is a dark ring rather than a dead process.
+`rs_ws281x` opens the PWM mailbox. If the journal says the NeoPixel backend is unavailable, set `User=root` in the unit, `daemon-reload`, and restart. The daemon falls back to logging halo transitions, so a permissions problem is a dark ring rather than a dead process.
 
-First boot with no `hey_grok_bot.onnx` downloads the pretrained `hey_jarvis` model. The Pi needs a network for that once.
+The installer downloads the default `hey_jarvis` classifier and the two shared feature models before service startup. The runtime performs no model downloads. On a laptop, run `scripts/fetch_wake_models.sh` before enabling microphone capture.
 
 ### Wake model
 
-Train `hey_grok_bot.onnx` with the automatic training notebook in [openWakeWord](https://github.com/dscripka/openWakeWord). The phrase is `hey grok bot`. Copy the ONNX file to `models/hey_grok_bot.onnx` (or whatever `WAKE_MODEL_PATH` says). The file is gitignored. `WAKE_THRESHOLD` defaults to `0.5`. `WAKE_COOLDOWN_S` defaults to `2`. Raise the cooldown toward 4 if Track B wakes on its own voice: the 2-mic HAT has no hardware echo canceller. Track A’s XMOS does, which is the reason to use the Lite as the USB front-end even when the daemon runs on a Pi.
+Train `hey_grok_bot.onnx` with the automatic training notebook in [openWakeWord](https://github.com/dscripka/openWakeWord). The phrase is `hey grok bot`. Copy the ONNX file to `models/hey_grok_bot.onnx` (or whatever `WAKE_MODEL_PATH` says). The file is gitignored. Put the shared `melspectrogram.onnx` and `embedding_model.onnx` files in `WAKE_ASSETS_DIR` (default `models`). The custom classifier must accept `[1, frames, 96]` float embeddings. Alternative `WAKE_FALLBACK` names require the corresponding `<name>_v0.1.onnx` file there; the fetch script installs `hey_jarvis` only. Model licences are separate from the daemon, see [THIRD_PARTY.md](THIRD_PARTY.md). `WAKE_THRESHOLD` defaults to `0.5`. `WAKE_COOLDOWN_S` defaults to `2`. Raise the cooldown toward 4 if Track B wakes on its own voice: the 2-mic HAT has no hardware echo canceller. Track A’s XMOS does, which is the reason to use the Lite as the USB front-end even when the daemon runs on a Pi.
 
 The daemon stops scoring the wake word while a session or a TTS reply is active, and for one cooldown after it returns to idle.
 
@@ -314,7 +317,7 @@ CLI flags override the file: `--dry-run`, `--simulate-wake`, `--text`, `--bot`, 
 
 ## systemd
 
-`systemd/grokbot-orb.service` runs `/opt/hey-grokbot-orb/.venv/bin/grokbot-orb` as the user who installed it, in the `audio` and `gpio` groups, with `Nice=-10`. `scripts/install_pi.sh` rewrites `User=` and installs the unit.
+`systemd/grokbot-orb.service` runs `/opt/hey-grokbot-orb/bin/grokbot-orb` as the user who installed it, in the `audio` and `gpio` groups, with `Nice=-10`. `scripts/install_pi.sh` rewrites `User=` and installs the unit.
 
 ```bash
 sudo systemctl start grokbot-orb
@@ -325,15 +328,15 @@ journalctl -u grokbot-orb -f
 ## Layout
 
 ```
-src/grokbot_orb/     daemon, halo, realtime client, webhook, callback server
+src/                 Rust daemon, halo, realtime client, webhook, callback server
 hardware/orb_enclosure.scad
 systemd/grokbot-orb.service
 scripts/install_pi.sh
 .env.example
-tests/               pytest: webhook payload, /speak, halo, resample, wake cooldown
+tests/               Rust tests plus Python-derived ONNX golden scores
 ```
 
-`grokbot-orb` and `python -m grokbot_orb` are the same entry point.
+The executable remains `grokbot-orb`; `cargo run -- --dry-run` runs it from source. See [PORTING.md](PORTING.md) for API/test mapping and migration differences.
 
 ## Troubleshooting
 

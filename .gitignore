@@ -15,3 +15,5 @@ agent-tools/
 *.stl
 *.3mf
 .DS_Store
+
+/target/
